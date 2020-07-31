@@ -44,8 +44,7 @@ bool check_fast_route(TensorList tensors, Scalar scalar) {
     if (!t.is_non_overlapping_and_dense()) {
       return false;
     }
-
-    if (at::isIntegralType(t.scalar_type()) != scalar.isIntegral()) {
+    if (at::isIntegralType(t.scalar_type()) && scalar.isFloatingPoint()) {
      return false;
     }
   }
