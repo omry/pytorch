@@ -1,7 +1,9 @@
 #pragma once
+
 #include <ATen/ATen.h>
 #include <ATen/native/cuda/Loops.cuh>
 #include <ATen/native/cuda/MemoryAccess.cuh>
+
 namespace at { 
 namespace native {
 namespace {
@@ -21,19 +23,13 @@ __device__ __forceinline__ void load_store(T* dst, T* src, int dst_offset, int s
   ((LT*)dst)[dst_offset] = ((LT*)src)[src_offset];
 }
 
-}
 
 bool check_fast_route(TensorList tensors, Scalar scalar) {
   TORCH_CHECK(tensors.size() > 0, "Tensor list must have at least one tensor.");
   auto expected_dtype = tensors[0].dtype();
-  auto expected_strides = tensors[0].strides();
 
   for (auto t : tensors) {
     if (t.dtype() != expected_dtype) {
-      return false;
-    }
-
-    if (t.strides() != expected_strides) {
       return false;
     }
 
@@ -44,11 +40,47 @@ bool check_fast_route(TensorList tensors, Scalar scalar) {
     if (!t.is_non_overlapping_and_dense()) {
       return false;
     }
-    if (at::isIntegralType(t.scalar_type()) && scalar.isFloatingPoint()) {
+
+    if ((at::isIntegralType(t.scalar_type(), true) && scalar.isFloatingPoint()) || 
+        (t.scalar_type() == at::kBool && scalar.isIntegral())) {
      return false;
     }
   }
 
   return true;
+}
+
+bool check_fast_route(TensorList tensors1, TensorList tensors2) {
+  TORCH_CHECK(tensors1.size() > 0, "Tensor list must have at least one tensor.");
+  TORCH_CHECK(tensors1.size() ==  tensors2.size(), "Tensor lists must be of the same length.");
+
+  auto expected_dtype = tensors1[0].dtype();
+
+  for (int i = 0; i < tensors1.size(); i++) {
+    TORCH_CHECK(tensors1[i].sizes() == tensors2[i].sizes(), "Corresponding tensors from tensor lists have different size.");
+
+    if (tensors1[i].dtype() != expected_dtype || 
+        tensors2[i].dtype() != expected_dtype) {
+      return false;
+    }
+
+    if (tensors1[i].layout() != at::kStrided || 
+        tensors2[i].layout() != at::kStrided) {
+      return false;
+    }
+
+    if (tensors1[i].strides() != tensors2[i].strides()) {
+      return false;
+    }
+
+    if (!tensors1[i].is_non_overlapping_and_dense() || 
+        !tensors2[i].is_non_overlapping_and_dense()) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 }
 }} // at::native
